@@ -8,7 +8,7 @@
 
 - `classification-reviewer.html`：网页版复核和导出工具。
 - `restored.py`：命令行备用脚本。
-- `README.md` / `README.docx`：使用说明。
+- `README.md`：使用说明。
 - `claude-export.zip`：你从 Claude 导出的数据包，不要上传到 GitHub。
 
 ## Web Usage

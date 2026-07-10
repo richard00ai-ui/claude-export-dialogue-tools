@@ -1,40 +1,34 @@
-# Claude export dialogue pipeline
+# Claude Export Dialogue Tools
 
-把 Claude export zip 转成 dialogue-folder 工作区。
+把 Claude 导出的 zip，在浏览器里复核项目归属，并导出成 dialogue-folder 文件夹。
 
-## Usage
+## Files
 
-在桌面创建一个文件夹，命名为 `claude备份`。
+你只需要这几个文件：
 
-把这些文件放进 `claude备份`：
+- `classification-reviewer.html`：网页版复核和导出工具。
+- `restored.py`：命令行备用脚本。
+- `README.md` / `README.docx`：使用说明。
+- `claude-export.zip`：你从 Claude 导出的数据包，不要上传到 GitHub。
 
-- `restored.py`
-- `classification-reviewer.html`
-- `claude-export.zip`，也就是从 Claude 获取到的数据压缩包，请重命名成这个名字
+## Web Usage
 
-如果你想先人工复核项目归属并直接导出文件夹：
+1. 把 `classification-reviewer.html` 和 `claude-export.zip` 放在同一个文件夹里。
+2. 双击打开 `classification-reviewer.html`。
+3. 拖入或选择 `claude-export.zip`。
+4. 在左侧选择项目，中间选择对话，右侧查看内容。
+5. 如果对话归属不对，在右侧下拉框改到正确项目，点击保存归属。
+6. 点击 `以文件夹的形式导出`。
+7. 选择保存位置，页面会生成一个 `restored-时间戳/` 文件夹。
 
-1. 双击打开 `classification-reviewer.html`。
-2. 拖入 `claude-export.zip`。
-3. 在页面里调整错分的对话。
-4. 点击 `以文件夹的形式导出`，选择保存位置。
+所有读取、复核和导出都在本地浏览器完成，不需要上传 Claude 数据。
 
-打开终端，运行：
+## Web Output
 
-```bash
-cd ~/Desktop/claude备份
-python3 restored.py claude-export.zip --output restored --work-dir work --force
-```
-
-运行后结果在 `restored/`。
-`work/` 是临时处理目录，运行成功后会自动删除。
-
-脚本固定生成的结构名使用英文；从 Claude 导出内容转译出来的项目名、对话名、资料名会保留原文。
-
-## Output layout
+导出的文件夹大致是：
 
 ```text
-restored/
+restored-时间戳/
 ├── README.md
 ├── memory.md
 └── projects/
@@ -49,7 +43,29 @@ restored/
                 └── files/
 ```
 
-## Options
+`未分类对话` 会作为一个项目文件夹出现。置信分为 0 的对话不会显示，也不会导出。
+
+## Classification Review
+
+页面会自动用项目名称、项目记忆、项目资料和对话内容做初步分类。
+
+复核时重点看：
+
+- 分数低或第一、第二候选接近的对话。
+- 被放进 `未分类对话` 的对话。
+- 明显属于某个项目、但被分到另一个项目的对话。
+
+修改后的项目归属会直接用于 `以文件夹的形式导出`。
+
+## Optional CLI
+
+如果你不需要网页复核，也可以用脚本直接生成：
+
+```bash
+python3 restored.py claude-export.zip --output restored --work-dir work --force
+```
+
+常用参数：
 
 - `--output`: 输出目录。
 - `--work-dir`: 临时处理目录。
@@ -59,11 +75,12 @@ restored/
 - `--min-score`: 分类最低分；低于该分数的对话进入 `未分类对话`。
 - `--classification-map`: 使用手动项目归属修正表。
 
-## Classification
+## Privacy
 
-脚本会用项目名称、项目文档、项目记忆匹配对话标题和摘要。
-如果传入手动修正表，手动修正会优先于自动分类。
-低置信度对话会放入 `projects/未分类对话/`，方便后续人工复核。
-没有标题、摘要、正文或有效附件名的空对话会自动跳过。
-对话中带 `extracted_content` 的附件会写入该对话的 `files/`。
-没有记忆、资料、描述和有效对话的空项目会自动跳过。
+不要提交这些文件或目录到 GitHub：
+
+- `claude-export.zip`
+- `restored/`
+- `restored-*/`
+- `work/`
+- `.claude-export-work/`

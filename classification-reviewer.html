@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Project Classification Reviewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    :root{
+      --bg:#f6f4ee;--panel:#fff;--ink:#1f1e1c;--muted:#6d6860;--line:#e4dfd5;
+      --accent:#cc6b3f;--accent2:#2563eb;--weak:#f4e7dd;--soft:#faf9f6;
+      --ok:#33824d;--warn:#a86411;--danger:#b7362e;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;overflow:hidden}
+    body{font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--bg)}
+    button,input,select{font:inherit}
+    .app{height:100vh;display:grid;grid-template-columns:320px 360px minmax(0,1fr)}
+    .panel{min-width:0;min-height:0;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column}
+    .head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+    .head h1{font-size:16px;margin:0;line-height:1.2}
+    .head small{color:var(--muted);display:block;font-size:12px;margin-top:2px}
+    .badge{margin-left:auto;border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--muted);font-size:12px;background:var(--soft)}
+    .load{padding:12px 14px;border-bottom:1px solid var(--line);display:grid;gap:9px}
+    .drop{border:1.5px dashed var(--line);border-radius:8px;background:var(--bg);padding:14px 12px;text-align:center;color:var(--muted);cursor:pointer}
+    .drop:hover,.drop.hot{border-color:var(--accent);background:var(--weak);color:var(--accent)}
+    .drop b{color:var(--ink)}
+    .row{display:flex;gap:8px;align-items:center}
+    .search{width:100%;border:1px solid var(--line);border-radius:7px;background:var(--soft);padding:8px 10px;outline:none}
+    .search:focus{border-color:var(--accent)}
+    .btn{border:1px solid var(--line);background:var(--soft);border-radius:7px;padding:7px 10px;cursor:pointer;color:var(--ink);white-space:nowrap}
+    .btn:hover{border-color:var(--accent);background:var(--weak)}
+    .btn.primary{background:var(--accent);border-color:var(--accent);color:white}
+    .btn.primary:hover{background:#b85a30}
+    .btn:disabled{opacity:.45;cursor:default}
+    .stats{display:flex;gap:6px;flex-wrap:wrap;color:var(--muted);font-size:12px}
+    .pill{border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:2px 8px}
+    .list{overflow:auto;padding:10px 10px 16px;min-height:0;flex:1}
+    .item{border:1px solid var(--line);background:var(--soft);border-radius:8px;padding:9px 10px;margin-bottom:7px;cursor:pointer}
+    .item:hover{border-color:var(--accent)}
+    .item.sel{background:var(--weak);border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+    .title{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .meta{color:var(--muted);font-size:12px;display:flex;gap:8px;flex-wrap:wrap;margin-top:3px}
+    .snip{color:var(--muted);font-size:12px;margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .toolbar{padding:10px 12px;border-bottom:1px solid var(--line);display:grid;gap:8px}
+    .main{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--bg)}
+    .convhead{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 18px;display:grid;gap:10px}
+    .convhead h2{margin:0;font-size:18px;line-height:1.3}
+    .assign{display:grid;grid-template-columns:1fr auto auto;gap:8px}
+    .assign select{min-width:0;border:1px solid var(--line);border-radius:7px;background:var(--soft);padding:7px 10px}
+    .thread{overflow:auto;padding:18px;min-height:0;flex:1}
+    .msg{max-width:860px;margin:0 auto 14px}
+    .who{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;color:var(--muted)}
+    .bubble{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+    .human .bubble{border-color:#bdd0fb;background:#f0f4ff}
+    .assistant .bubble{background:var(--soft)}
+    .think{border:1px solid #ead8bf;background:#fff8ef;border-radius:8px;margin:0 0 10px;overflow:hidden}
+    .think summary{cursor:pointer;color:#8a551c;font-weight:700;font-size:12px;padding:8px 10px;list-style:none}
+    .think summary::-webkit-details-marker{display:none}
+    .think summary:before{content:"›";display:inline-block;margin-right:6px;transition:.15s}
+    .think[open] summary:before{transform:rotate(90deg)}
+    .thinkbody{border-top:1px solid #ead8bf;color:#5f5549;background:#fffaf2;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+    .empty{margin:auto;text-align:center;color:var(--muted);max-width:420px;padding:28px}
+    .score{font-size:12px;color:var(--muted)}
+    .score b{color:var(--ink)}
+    .scoregrid{display:grid;grid-template-columns:1fr auto;gap:4px 10px}
+    .changed{color:var(--ok);font-weight:700}
+    .low{color:var(--warn)}
+    .bad{color:var(--danger)}
+    @media(max-width:900px){
+      .app{grid-template-columns:1fr;height:auto;min-height:100vh;overflow:auto}
+      html,body{overflow:auto}
+      .panel,.main{min-height:420px}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <section class="panel">
+    <div class="head">
+      <div>
+        <h1>项目复核</h1>
+        <small>拖入 Claude export zip</small>
+      </div>
+      <span class="badge" id="loadState">未加载</span>
+    </div>
+    <div class="load">
+      <label class="drop" id="drop">
+        <b>选择或拖入 claude-export.zip</b><br>
+        <span>所有处理都在本地浏览器完成</span>
+        <input type="file" id="file" accept=".zip,application/zip" hidden>
+      </label>
+      <div class="stats" id="stats">
+        <span class="pill">项目 0</span><span class="pill">对话 0</span><span class="pill">已修改 0</span>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="saveAsBtn" disabled>以文件夹的形式导出</button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input class="search" id="projectSearch" placeholder="搜索项目">
+    </div>
+    <div class="list" id="projectList"></div>
+  </section>
+
+  <section class="panel">
+    <div class="head">
+      <div>
+        <h1>对话</h1>
+        <small>按当前归属筛选</small>
+      </div>
+      <span class="badge" id="convCount">0</span>
+    </div>
+    <div class="toolbar">
+      <input class="search" id="convSearch" placeholder="搜索标题、摘要、正文">
+      <div class="row">
+        <button class="btn" data-filter="all">全部</button>
+        <button class="btn" data-filter="changed">已修改</button>
+        <button class="btn" data-filter="low">低置信</button>
+      </div>
+    </div>
+    <div class="list" id="convList"></div>
+  </section>
+
+  <main class="main" id="main">
+    <div class="empty">拖入 Claude 导出的 zip 后，可以在这里查看对话、调整项目归属，并按文件夹结构导出。</div>
+  </main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const UNCLASSIFIED = "未分类对话";
+let projects = [];
+let conversations = [];
+let selectedProject = UNCLASSIFIED;
+let selectedConversation = null;
+let filterMode = "all";
+let overrides = {};
+let globalMemory = "";
+
+function esc(s){return (s??"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function fmtDate(s){const d=new Date(s);return isNaN(d)?"":d.toLocaleString("zh-CN",{hour12:false})}
+function pick(o, keys, fallback=""){for(const k of keys){if(o&&o[k]!=null&&o[k]!=="")return o[k]}return fallback}
+function safeName(value, fallback="untitled", max=72){
+  let text = (value??"").toString().trim() || fallback;
+  text = text.replaceAll("/", "／").replaceAll("\\", "＼").replaceAll(":", "：");
+  text = text.replace(/[\x00-\x1f]/g, "_").replace(/\s+/g, "-").replace(/-{2,}/g, "-").replace(/[ ._-]+$/g, "").replace(/^[ ._-]+/g, "");
+  if(text.length > max)text = text.slice(0,max).replace(/[ ._-]+$/g, "");
+  return text || fallback;
+}
+function timestampPrefix(value){
+  const d = new Date(value);
+  if(isNaN(d))return "no-date";
+  const pad = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+}
+function fileExt(type){
+  const t = (type||"").toString().toLowerCase();
+  if(t.includes("markdown"))return ".md";
+  if(t.includes("json"))return ".json";
+  if(t.includes("python"))return ".py";
+  if(t.includes("csv"))return ".csv";
+  if(t.includes("html"))return ".html";
+  return ".txt";
+}
+function uniqueName(base, used){
+  let name = base, index = 2;
+  while(used.has(name)){
+    const dot = name.lastIndexOf(".");
+    const stem = dot > 0 ? base.slice(0, base.lastIndexOf(".")) : base;
+    const ext = dot > 0 ? base.slice(base.lastIndexOf(".")) : "";
+    name = `${stem}-${index}${ext}`;
+    index++;
+  }
+  used.add(name);
+  return name;
+}
+function messageParts(m){
+  if(!m)return {text:"", thoughts:[], flow:[]};
+  const flow = [], text = [], thoughts = [];
+  const c=m.content;
+  if(Array.isArray(c)){
+    for(const b of c){
+      if(typeof b==="string"){
+        text.push(b);
+        flow.push({type:"text", text:b});
+        continue;
+      }
+      if(!b || typeof b!=="object")continue;
+      if(b.type==="thinking" || b.type==="redacted_thinking"){
+        const t = b.thinking || b.text || b.content || b.summary || "[加密的思考内容]";
+        const title = b.summary || b.title || b.headline || b.thinking_summary || b.summary_text || "";
+        thoughts.push(String(t));
+        flow.push({type:"thinking", text:String(t), title:String(title)});
+      }else if(b.type==="text" || b.type===undefined){
+        const t = b.text || b.content || "";
+        if(t){
+          text.push(String(t));
+          flow.push({type:"text", text:String(t)});
+        }
+      }
+    }
+    return {text:text.join("\n\n").trim(), thoughts, flow};
+  }
+  const thinking = pick(m,["thinking","reasoning","thinking_content"],"");
+  const plain = m.text ? String(m.text) : (c ? String(c) : "");
+  if(thinking)flow.push({type:"thinking", text:String(thinking), title:""});
+  if(plain)flow.push({type:"text", text:plain});
+  return {text:plain.trim(), thoughts:thinking?[String(thinking)]:[], flow};
+}
+function textOfMessage(m){return messageParts(m).text}
+function convTitle(c){return pick(c,["name","title","summary"],"") || "(无标题对话)"}
+function convMessages(c){return c.chat_messages || c.messages || []}
+function convText(c, max=6000){
+  const body = convMessages(c).map(textOfMessage).join("\n");
+  return [c.name,c.summary,body].filter(Boolean).join("\n").slice(0,max);
+}
+function tokenize(text){
+  const out = {};
+  const enStop = new Set("the and for with that this from into project conversation claude current context purpose state tools resources".split(" "));
+  const zhStop = new Set(["这个","那个","项目","对话","讨论","分析","什么","如何","可以","需要","当前","已经","进行","一个","相关","内容"]);
+  for(const m of (text.toLowerCase().match(/[a-z][a-z0-9_-]{2,}/g)||[])){if(!enStop.has(m))out[m]=(out[m]||0)+1}
+  for(const seg of (text.match(/[\u4e00-\u9fff]{2,}/g)||[])){
+    if(!zhStop.has(seg))out[seg]=(out[seg]||0)+2;
+    for(let i=0;i+2<=seg.length;i++){const g=seg.slice(i,i+2);if(!zhStop.has(g))out[g]=(out[g]||0)+1}
+    for(let i=0;i+3<=seg.length;i++){const g=seg.slice(i,i+3);if(!zhStop.has(g))out[g]=(out[g]||0)+1}
+  }
+  return out;
+}
+function topTokens(obj, limit=80){
+  return Object.fromEntries(Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,limit));
+}
+function score(project, conv){
+  const tokens = tokenize(convText(conv));
+  let n = 0;
+  for(const [k,v] of Object.entries(tokens))n += Math.min(v,3) * Math.min(project.keywords[k]||0,5);
+  return n;
+}
+function getAssignment(c){return overrides[c.uuid] || c._autoProject || UNCLASSIFIED}
+function isLow(c){return (c._bestScore||0) < 2 || ((c._bestScore||0) - (c._secondScore||0)) < 2}
+function visibleConversations(){return conversations.filter(c=>(c._bestScore||0)>0)}
+function buildProjectProfiles(memories){
+  const pm = (((memories||[])[0]||{}).project_memories)||{};
+  projects = projects.map(p=>{
+    const docs = p.docs || [];
+    const text = [p.name,p.description,p.prompt_template,pm[p.uuid]||""]
+      .concat(docs.map(d=>[(d.filename||""),(d.content||"")].join("\n"))).join("\n");
+    return {...p, memory:pm[p.uuid]||"", keywords:topTokens(tokenize(text)), count:0};
+  });
+}
+function assignAutomatically(){
+  const all = [...projects, {uuid:UNCLASSIFIED,name:UNCLASSIFIED,keywords:{},count:0}];
+  for(const c of conversations){
+    const ranked = projects.map(p=>({p, s:score(p,c)})).sort((a,b)=>b.s-a.s);
+    const best = ranked[0], second = ranked[1];
+    c._autoProject = best && best.s >= 2 ? best.p.uuid : UNCLASSIFIED;
+    c._bestProject = best ? best.p.uuid : UNCLASSIFIED;
+    c._bestScore = best ? best.s : 0;
+    c._secondProject = second ? second.p.uuid : "";
+    c._secondScore = second ? second.s : 0;
+  }
+  for(const p of all)p.count = conversations.filter(c=>getAssignment(c)===p.uuid).length;
+}
+async function loadZip(file){
+  $("#loadState").textContent = "读取中";
+  const zip = await JSZip.loadAsync(file);
+  let convJson = null, memories = [], projectItems = [];
+  const entries = [];
+  zip.forEach((path, entry)=>{if(!entry.dir && /\.json$/i.test(path))entries.push({path,entry})});
+  for(const it of entries){
+    const base = it.path.split("/").pop();
+    const text = await it.entry.async("text");
+    let data;
+    try{data = JSON.parse(text)}catch(e){continue}
+    if(base === "conversations.json")convJson = data;
+    else if(base === "memories.json")memories = data;
+    else if(/^projects\/[^/]+\.json$/i.test(it.path))projectItems.push(data);
+  }
+  globalMemory = (((memories||[])[0]||{}).conversations_memory)||"";
+  projects = projectItems.map(p=>({uuid:p.uuid||p.id,name:(p.name||`project-${(p.uuid||"").slice(0,8)}`)||"(未命名项目)",description:p.description||"",docs:p.docs||[],prompt_template:p.prompt_template||""}));
+  conversations = Array.isArray(convJson) ? convJson.filter(c=>convMessages(c).length || c.name || c.summary) : [];
+  overrides = {};
+  buildProjectProfiles(memories);
+  assignAutomatically();
+  selectedProject = firstVisibleProjectId();
+  selectedConversation = null;
+  $("#loadState").textContent = "已加载";
+  $("#saveAsBtn").disabled = false;
+  renderAll();
+}
+function projectName(id){return id===UNCLASSIFIED?UNCLASSIFIED:(projects.find(p=>p.uuid===id)?.name || id)}
+function renderStats(){
+  const changed = Object.keys(overrides).length;
+  const visible = visibleConversations();
+  const visibleProjectCount = [{uuid:UNCLASSIFIED}].concat(projects).filter(p=>visible.some(c=>getAssignment(c)===p.uuid)).length;
+  $("#stats").innerHTML = `<span class="pill">项目 ${visibleProjectCount}</span><span class="pill">对话 ${visible.length}</span><span class="pill">已修改 ${changed}</span>`;
+}
+function firstVisibleProjectId(){
+  const visible = visibleConversations();
+  const first = [{uuid:UNCLASSIFIED}].concat(projects).find(p=>visible.some(c=>getAssignment(c)===p.uuid));
+  return first ? first.uuid : UNCLASSIFIED;
+}
+function renderProjects(){
+  const q = $("#projectSearch").value.trim().toLowerCase();
+  const visible = visibleConversations();
+  const rows = [{uuid:UNCLASSIFIED,name:UNCLASSIFIED,description:"低置信或未归属对话"}].concat(projects)
+    .filter(p=>visible.some(c=>getAssignment(c)===p.uuid))
+    .filter(p=>!q || `${p.name} ${p.description}`.toLowerCase().includes(q));
+  if(!rows.some(p=>p.uuid===selectedProject))selectedProject = rows[0]?.uuid || UNCLASSIFIED;
+  $("#projectList").innerHTML = rows.map(p=>{
+    const count = visible.filter(c=>getAssignment(c)===p.uuid).length;
+    return `<div class="item ${selectedProject===p.uuid?'sel':''}" data-id="${esc(p.uuid)}">
+      <div class="title">${esc(p.name||p.uuid)}</div>
+      <div class="meta"><span>${count} 条对话</span>${p.uuid===UNCLASSIFIED?"":`<span>${esc(p.uuid.slice(0,8))}</span>`}</div>
+      ${p.description?`<div class="snip">${esc(p.description)}</div>`:""}
+    </div>`;
+  }).join("") || `<div class="empty">没有匹配项目</div>`;
+}
+function filteredConvs(){
+  const q = $("#convSearch").value.trim().toLowerCase();
+  return visibleConversations().filter(c=>{
+    if(getAssignment(c)!==selectedProject)return false;
+    if(filterMode==="changed" && !overrides[c.uuid])return false;
+    if(filterMode==="low" && !isLow(c))return false;
+    if(q && !convText(c).toLowerCase().includes(q))return false;
+    return true;
+  }).sort((a,b)=>new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0));
+}
+function renderConversations(){
+  const rows = filteredConvs();
+  $("#convCount").textContent = rows.length;
+  $("#convList").innerHTML = rows.map(c=>{
+    const changed = overrides[c.uuid] ? `<span class="changed">已改</span>` : "";
+    const low = isLow(c) ? `<span class="low">低置信</span>` : "";
+    return `<div class="item ${selectedConversation&&selectedConversation.uuid===c.uuid?'sel':''}" data-id="${esc(c.uuid)}">
+      <div class="title">${esc(convTitle(c))}</div>
+      <div class="meta"><span>${fmtDate(c.updated_at||c.created_at)}</span>${changed}${low}<span>分 ${c._bestScore||0}</span></div>
+      <div class="snip">${esc(c.summary || textOfMessage(convMessages(c)[0]) || "")}</div>
+    </div>`;
+  }).join("") || `<div class="empty">没有匹配对话</div>`;
+}
+function renderMain(){
+  if(!selectedConversation){
+    $("#main").innerHTML = `<div class="empty">选择一条对话查看详情。</div>`;
+    return;
+  }
+  const c = selectedConversation;
+  const options = [`<option value="${UNCLASSIFIED}">${UNCLASSIFIED}</option>`].concat(projects.map(p=>`<option value="${esc(p.uuid)}">${esc(p.name)}</option>`)).join("");
+  const renderThinking = (text, index, total, title) => {
+    const label = title ? `${esc(title)}${total>1?` · ${index}/${total}`:""}` : (total>1 ? `思考过程 ${index}/${total}` : "思考过程");
+    return `<details class="think"><summary>${label}（默认隐藏，点击展开）</summary><div class="thinkbody">${esc(text)}</div></details>`;
+  };
+  const msgs = convMessages(c).map(m=>{
+    const human = (m.sender||"").toLowerCase().startsWith("human");
+    const parts = messageParts(m);
+    const totalThoughts = parts.flow.filter(x=>x.type==="thinking").length || parts.thoughts.length;
+    let seenThoughts = 0;
+    const body = parts.flow.map(seg=>{
+      if(seg.type==="thinking" && !human)return renderThinking(seg.text, ++seenThoughts, totalThoughts, seg.title || "");
+      if(seg.type==="text" && seg.text)return esc(seg.text);
+      return "";
+    }).filter(Boolean).join("\n\n") || esc(parts.text || "(空消息)");
+    return `<section class="msg ${human?'human':'assistant'}">
+      <div class="who">${esc(m.sender||"unknown")} <span>${esc(fmtDate(m.created_at))}</span></div>
+      <div class="bubble">${body}</div>
+    </section>`;
+  }).join("");
+  $("#main").innerHTML = `<div class="convhead">
+    <div>
+      <h2>${esc(convTitle(c))}</h2>
+      <div class="meta"><span>UUID ${esc(c.uuid)}</span><span>当前 ${esc(projectName(getAssignment(c)))}</span></div>
+    </div>
+    <div class="assign">
+      <select id="assignSelect">${options}</select>
+      <button class="btn primary" id="saveAssign">保存归属</button>
+      <button class="btn" id="resetAssign">撤销</button>
+    </div>
+    <div class="score scoregrid">
+      <span>自动第一候选：<b>${esc(projectName(c._bestProject))}</b></span><span>${c._bestScore||0}</span>
+      <span>自动第二候选：<b>${esc(projectName(c._secondProject))}</b></span><span>${c._secondScore||0}</span>
+      <span>当前来源：<b>${overrides[c.uuid]?"手动修正":"自动推断"}</b></span><span>${isLow(c)?"低置信":"-"}</span>
+    </div>
+  </div>
+  <div class="thread">${msgs}</div>`;
+  $("#assignSelect").value = getAssignment(c);
+  $("#saveAssign").onclick = () => {
+    const v = $("#assignSelect").value;
+    if(v === c._autoProject) delete overrides[c.uuid]; else overrides[c.uuid] = v;
+    assignAutomatically();
+    renderAll();
+    selectedConversation = conversations.find(x=>x.uuid===c.uuid) || null;
+    renderMain();
+  };
+  $("#resetAssign").onclick = () => {
+    delete overrides[c.uuid];
+    assignAutomatically();
+    renderAll();
+    selectedConversation = conversations.find(x=>x.uuid===c.uuid) || null;
+    renderMain();
+  };
+}
+function renderAll(){renderStats();renderProjects();renderConversations();renderMain()}
+async function getDir(root, parts){
+  let dir = root;
+  for(const part of parts)dir = await dir.getDirectoryHandle(part, {create:true});
+  return dir;
+}
+async function writeFile(root, parts, text){
+  const fileName = parts[parts.length-1];
+  const dir = await getDir(root, parts.slice(0,-1));
+  const handle = await dir.getFileHandle(fileName, {create:true});
+  const writable = await handle.createWritable();
+  await writable.write(new Blob([text], {type:"text/plain;charset=utf-8"}));
+  await writable.close();
+}
+function conversationFolderName(c){
+  return `${safeName(convTitle(c), `conversation-${(c.uuid||"").slice(0,8)}`, 48)}_${timestampPrefix(c.created_at)}_${(c.uuid||"").slice(0,8)}`;
+}
+function transcriptMarkdown(c){
+  const lines = ["# Conversation transcript", "", `- Source title: ${convTitle(c)}`, `- Source UUID: ${c.uuid||""}`, ""];
+  convMessages(c).forEach((m, i)=>{
+    const parts = messageParts(m);
+    lines.push(`## Message ${i+1}`, "", `- Sender: ${m.sender||"unknown"}`, `- Created at: ${m.created_at||""}`, "");
+    for(const seg of parts.flow){
+      if(seg.type==="thinking")lines.push("### Thinking", "", seg.text || "", "");
+      if(seg.type==="text")lines.push(seg.text || "", "");
+    }
+    if(!parts.flow.length)lines.push(parts.text || "", "");
+  });
+  return lines.join("\n").replace(/\n+$/,"") + "\n";
+}
+async function writeConversationFiles(root, baseParts, c){
+  const used = new Set();
+  let written = 0;
+  for(const [mi, m] of convMessages(c).entries()){
+    for(const key of ["attachments","files"]){
+      for(const [ii, item] of ((m&&m[key])||[]).entries()){
+        if(!item || typeof item !== "object")continue;
+        const content = item.extracted_content;
+        if(content == null || !String(content).trim())continue;
+        let name = safeName(item.file_name || item.filename || item.name, `${key.slice(0,-1)}-message-${String(mi+1).padStart(3,"0")}-${String(ii+1).padStart(2,"0")}${fileExt(item.file_type)}`, 96);
+        if(!name.split("/").pop().includes("."))name += fileExt(item.file_type);
+        name = uniqueName(name, used);
+        await writeFile(root, baseParts.concat(["files", name]), String(content).trimEnd()+"\n");
+        written++;
+      }
+    }
+  }
+  return written;
+}
+async function exportAsFolder(){
+  if(!window.showDirectoryPicker){
+    alert("当前浏览器不支持直接导出文件夹。请使用 Chrome 或 Edge 打开这个页面。");
+    return;
+  }
+  const visible = visibleConversations();
+  if(!visible.length){
+    alert("没有可导出的对话。");
+    return;
+  }
+  let parent;
+  try{
+    parent = await window.showDirectoryPicker({mode:"readwrite"});
+  }catch(e){
+    if(e && e.name === "AbortError")return;
+    alert("无法选择保存位置。");
+    return;
+  }
+  const previous = $("#saveAsBtn").textContent;
+  $("#saveAsBtn").disabled = true;
+  $("#saveAsBtn").textContent = "正在导出...";
+  try{
+    const stamp = timestampPrefix(new Date()).replaceAll("-","").replace("_","-");
+    const rootName = `restored-${stamp}`;
+    const root = await parent.getDirectoryHandle(rootName, {create:true});
+    const activeProjectIds = [{uuid:UNCLASSIFIED}].concat(projects).map(p=>p.uuid).filter(id=>visible.some(c=>getAssignment(c)===id));
+    await writeFile(root, ["README.md"], [
+      "# Dialogue folder export",
+      "",
+      "This workspace was generated from Claude export in the browser reviewer.",
+      "",
+      "## Counts",
+      "",
+      `- Projects: ${activeProjectIds.length}`,
+      `- Conversations: ${visible.length}`,
+      "",
+    ].join("\n"));
+    await writeFile(root, ["memory.md"], ["# Global memory", "", "## Source conversation memory", "", globalMemory.trim() || "No global conversation memory was found in the export.", ""].join("\n"));
+
+    for(const id of activeProjectIds){
+      const isUnclassified = id === UNCLASSIFIED;
+      const project = isUnclassified ? {uuid:UNCLASSIFIED,name:UNCLASSIFIED,description:"",docs:[],memory:""} : projects.find(p=>p.uuid===id);
+      if(!project)continue;
+      const projectDirName = safeName(project.name || project.uuid, `project-${String(project.uuid||"").slice(0,8)}`, 72);
+      const projectParts = ["projects", projectDirName];
+      if(!isUnclassified){
+        await writeFile(root, projectParts.concat(["memory.md"]), [
+          `# ${projectDirName} memory`,
+          "",
+          "## Source",
+          "",
+          `- Source name: ${project.name||""}`,
+          `- Source UUID: ${project.uuid||""}`,
+          "",
+          "## Stable context",
+          "",
+          (project.memory||"").trim() || "No project memory was found in the Claude export.",
+          "",
+        ].join("\n"));
+        const usedDocs = new Set();
+        for(const [di, doc] of (project.docs||[]).entries()){
+          if(!((doc.filename||"").trim() || (doc.content||"").trim()))continue;
+          let name = safeName(doc.filename, `document-${String(di+1).padStart(4,"0")}.md`, 96);
+          if(!name.includes("."))name += ".md";
+          name = uniqueName(name, usedDocs);
+          await writeFile(root, projectParts.concat(["references","files",name]), doc.content || "");
+        }
+      }
+      const usedConvs = new Set();
+      for(const c of visible.filter(item=>getAssignment(item)===id)){
+        const convDirName = uniqueName(conversationFolderName(c), usedConvs);
+        const convParts = projectParts.concat(["conversations", convDirName]);
+        await writeFile(root, convParts.concat(["summary.md"]), [
+          "# Conversation summary",
+          "",
+          "## Source",
+          "",
+          `- Title: ${c.name || ""}`,
+          `- UUID: ${c.uuid || ""}`,
+          `- Classified project: ${projectDirName}`,
+          `- Classification score: ${c._bestScore || 0}`,
+          `- Classification source: ${overrides[c.uuid] ? "manual" : "score"}`,
+          "",
+          "## Summary",
+          "",
+          c.summary || "No summary was included in the export.",
+          "",
+        ].join("\n"));
+        await writeFile(root, convParts.concat(["transcript.md"]), transcriptMarkdown(c));
+        await writeConversationFiles(root, convParts, c);
+      }
+    }
+    alert(`导出完成：${rootName}`);
+  }catch(e){
+    alert(`导出失败：${e.message || e}`);
+  }finally{
+    $("#saveAsBtn").disabled = false;
+    $("#saveAsBtn").textContent = previous;
+  }
+}
+$("#drop").onclick = () => $("#file").click();
+$("#file").onchange = e => {const f=e.target.files[0]; if(f)loadZip(f).catch(err=>alert(err.message)); e.target.value=""};
+["dragenter","dragover"].forEach(ev=>$("#drop").addEventListener(ev,e=>{e.preventDefault();$("#drop").classList.add("hot")}));
+["dragleave","drop"].forEach(ev=>$("#drop").addEventListener(ev,e=>{e.preventDefault();$("#drop").classList.remove("hot")}));
+$("#drop").addEventListener("drop",e=>{const f=e.dataTransfer.files[0]; if(f)loadZip(f).catch(err=>alert(err.message))});
+$("#projectSearch").oninput = renderProjects;
+$("#convSearch").oninput = renderConversations;
+$("#projectList").onclick = e => {
+  const item = e.target.closest(".item"); if(!item)return;
+  selectedProject = item.dataset.id; selectedConversation = null; renderAll();
+};
+$("#convList").onclick = e => {
+  const item = e.target.closest(".item"); if(!item)return;
+  selectedConversation = conversations.find(c=>c.uuid===item.dataset.id) || null; renderAll();
+};
+$$("[data-filter]").forEach(b=>b.onclick=()=>{filterMode=b.dataset.filter;renderConversations()});
+$("#saveAsBtn").onclick = exportAsFolder;
+</script>
+</body>
+</html>
